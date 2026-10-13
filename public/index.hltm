@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mesa de Poker Multijugador</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #0f2c14; color: #fff; text-align: center; margin: 0; padding: 15px; }
+        h1 { color: #f1c40f; font-size: 22px; }
+        .card { background: #143d1b; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 2px solid #f1c40f; }
+        .pot { font-size: 20px; font-weight: bold; margin-bottom: 10px; color: #2ecc71; }
+        .player-row { background: #1a4d22; padding: 10px; margin: 8px 0; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+        button { background: #f1c40f; border: none; padding: 10px 15px; font-weight: bold; border-radius: 5px; cursor: pointer; color: #000; font-size: 14px; margin: 3px; }
+        button.call { background: #3498db; color: #fff; }
+        button.fold { background: #e74c3c; color: #fff; }
+        button.win { background: #2ecc71; color: #fff; }
+        button.logout { background: #7f8c8d; color: #fff; }
+        button.danger { background: #c0392b; color: #fff; }
+        button:disabled { background: #555 !important; color: #aaa !important; cursor: not-allowed; }
+        input { padding: 8px; border-radius: 5px; border: none; margin-bottom: 10px; width: 80%; }
+        .controls-box { margin-top: 15px; display: flex; flex-direction: column; gap: 8px; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen" class="card">
+        <h1>♠️ Unirse a la Mesa ♥️</h1>
+        <input type="text" id="username" placeholder="Tu Nombre"><br>
+        <input type="number" id="initial-chips" value="1000" placeholder="Fichas iniciales"><br>
+        <button onclick="joinGame()">Entrar a la partida</button>
+    </div>
+
+    <div id="game-screen" style="display:none;">
+        <div class="card">
+            <h1>Mesa de Poker</h1>
+            <div class="pot">Pozo Acumulado: <span id="pot-amount">0</span> fichas</div>
+        </div>
+
+        <div class="card">
+            <h3>Estado de la Mesa</h3>
+            <div id="players-container"></div>
+        </div>
+
+        <div class="card controls-box">
+            <h3>Tus Acciones</h3>
+            <p>Tus Fichas: <strong id="my-chips">0</strong> | Tu Apuesta: <strong id="my-bet">0</strong></p>
+            <div>
+                <input type="number" id="bet-amount" value="50" style="width: 80px;">
+                <button id="btn-bet" onclick="placeBet()">Apostar / Subir</button>
+            </div>
+            <div>
+                <button id="btn-call" class="call" onclick="callBet()">Igualar (Call)</button>
+                <button id="btn-fold" class="fold" onclick="fold()">Fold (No va)</button>
+            </div>
+            <div style="margin-top: 10px; border-top: 1px solid #2e7d32; padding-top: 10px;">
+                <button id="btn-win" class="win" onclick="winPot()">¡Me llevé el pozo!</button>
+                <button onclick="resetHand()" style="background: #e67e22; color: #fff;">Limpiar Pozo</button>
+            </div>
+            <div style="margin-top: 15px; display: flex; justify-content: center; gap: 5px;">
+                <button class="logout" onclick="logout()">Cerrar Sesión</button>
+                <button class="danger" onclick="resetAllGame()">Reiniciar Sala</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let myId = null;
+
+        window.onload = () => {
+            const savedName = localStorage.getItem('poker_username');
+            const savedChips = localStorage.getItem('poker_chips');
+            if (savedName) {
+                document.getElementById('username').value = savedName;
+                if(savedChips) document.getElementById('initial-chips').value = savedChips;
+                joinGame();
+            }
+        };
+
+        function joinGame() {
+            const name = document.getElementById('username').value.trim();
+            const initialChips = parseInt(document.getElementById('initial-chips').value) || 1000;
+            if (!name) return alert("Ingresá un nombre");
+
+            localStorage.setItem('poker_username', name);
+            localStorage.setItem('poker_chips', initialChips);
+            
+            socket.emit('join-game', { name, initialChips });
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+        }
+
+        function logout() {
+            // Agregamos la confirmación antes de salir
+            if (confirm("¿Estás seguro de que querés cerrar sesión y salir de la mesa?")) {
+                socket.emit('logout-player');
+
+                localStorage.removeItem('poker_username');
+                localStorage.removeItem('poker_chips');
+                
+                window.location.reload();
+            }
+        }
+
+        function resetAllGame() {
+            if (confirm("¿Seguro que querés reiniciar toda la sala y borrar a todos los jugadores?")) {
+                socket.emit('reset-all-game');
+            }
+        }
+
+        function placeBet() {
+            const amount = parseInt(document.getElementById('bet-amount').value) || 0;
+            socket.emit('place-bet', amount);
+        }
+
+        function callBet() {
+            socket.emit('call');
+        }
+
+        function fold() {
+            socket.emit('fold');
+        }
+
+        function winPot() {
+            socket.emit('win-pot', socket.id);
+        }
+
+        function resetHand() {
+            socket.emit('reset-hand');
+        }
+
+        socket.on('update-game', (state) => {
+            myId = socket.id;
+            document.getElementById('pot-amount').innerText = state.pot;
+            
+            const container = document.getElementById('players-container');
+            container.innerHTML = '';
+
+            let activePlayersCount = 0;
+            for (let id in state.players) {
+                if (!state.players[id].folded) {
+                    activePlayersCount++;
+                }
+            }
+
+            for (let id in state.players) {
+                let p = state.players[id];
+                if (id === myId) {
+                    document.getElementById('my-chips').innerText = p.chips;
+                    document.getElementById('my-bet').innerText = p.currentBet;
+
+                    document.getElementById('btn-bet').disabled = p.folded;
+                    document.getElementById('btn-call').disabled = p.folded;
+                    document.getElementById('btn-fold').disabled = p.folded;
+
+                    const canWin = !p.folded && activePlayersCount <= 2;
+                    document.getElementById('btn-win').disabled = !canWin;
+                }
+
+                container.innerHTML += `
+                    <div class="player-row" style="opacity: ${p.folded ? 0.4 : 1}">
+                        <div>
+                            <strong>${p.name} ${id === myId ? '(Vos)' : ''}</strong><br>
+                            Fichas: ${p.chips} | Apuesta: ${p.currentBet} ${p.folded ? '[FOLD]' : ''}
+                        </div>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>
