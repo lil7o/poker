@@ -89,7 +89,7 @@ io.on('connection', (socket) => {
 
     socket.on('fold', () => {
         let player = gameState.players[socket.id];
-        if (player && player.chips > 0) {
+        if (player) {
             player.folded = true;
             io.emit('update-game', gameState);
         }
@@ -97,10 +97,11 @@ io.on('connection', (socket) => {
 
     socket.on('win-pot', (winnerId) => {
         let winner = gameState.players[winnerId];
-        if (!winner || winner.folded || winner.chips <= 0) return;
+        // Un jugador no puede ganar si no existe, si foldeó, o si está totalmente en bancarrota (0 fichas y 0 apuesta)
+        if (!winner || winner.folded || (winner.chips <= 0 && winner.currentBet === 0)) return;
 
-        // Contamos cuántos jugadores siguen con vida y activos
-        let activePlayers = Object.values(gameState.players).filter(p => !p.folded && p.chips > 0);
+        // Jugadores activos en la mano (no foldeados y con fichas o apuesta en mesa)
+        let activePlayers = Object.values(gameState.players).filter(p => !p.folded && (p.chips > 0 || p.currentBet > 0));
         
         if (activePlayers.length > 2) return;
 
@@ -110,7 +111,7 @@ io.on('connection', (socket) => {
         
         Object.values(gameState.players).forEach(p => {
             p.currentBet = 0;
-            if (p.chips > 0) p.folded = false;
+            p.folded = false;
         });
         io.emit('update-game', gameState);
     });
@@ -120,7 +121,7 @@ io.on('connection', (socket) => {
         gameState.currentHighestBet = 0;
         Object.values(gameState.players).forEach(p => {
             p.currentBet = 0;
-            if (p.chips > 0) p.folded = false;
+            p.folded = false;
         });
         io.emit('update-game', gameState);
     });
