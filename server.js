@@ -45,7 +45,6 @@ io.on('connection', (socket) => {
         io.emit('update-game', gameState);
     });
 
-    // NUEVO: Borrar al jugador del servidor al hacer Logout explícito
     socket.on('logout-player', () => {
         if (gameState.players[socket.id]) {
             delete gameState.players[socket.id];
@@ -55,7 +54,7 @@ io.on('connection', (socket) => {
 
     socket.on('place-bet', (amount) => {
         let player = gameState.players[socket.id];
-        if (!player || player.folded) return;
+        if (!player || player.folded || player.chips <= 0) return;
 
         if (amount > player.chips) return;
 
@@ -72,7 +71,7 @@ io.on('connection', (socket) => {
 
     socket.on('call', () => {
         let player = gameState.players[socket.id];
-        if (!player || player.folded) return;
+        if (!player || player.folded || player.chips <= 0) return;
 
         let difference = gameState.currentHighestBet - player.currentBet;
         if (difference <= 0) return;
@@ -90,7 +89,7 @@ io.on('connection', (socket) => {
 
     socket.on('fold', () => {
         let player = gameState.players[socket.id];
-        if (player) {
+        if (player && player.chips > 0) {
             player.folded = true;
             io.emit('update-game', gameState);
         }
@@ -98,9 +97,11 @@ io.on('connection', (socket) => {
 
     socket.on('win-pot', (winnerId) => {
         let winner = gameState.players[winnerId];
-        if (!winner || winner.folded) return;
+        if (!winner || winner.folded || winner.chips <= 0) return;
 
-        let activePlayers = Object.values(gameState.players).filter(p => !p.folded);
+        // Contamos cuántos jugadores siguen con vida y activos
+        let activePlayers = Object.values(gameState.players).filter(p => !p.folded && p.chips > 0);
+        
         if (activePlayers.length > 2) return;
 
         winner.chips += gameState.pot;
@@ -109,7 +110,7 @@ io.on('connection', (socket) => {
         
         Object.values(gameState.players).forEach(p => {
             p.currentBet = 0;
-            p.folded = false;
+            if (p.chips > 0) p.folded = false;
         });
         io.emit('update-game', gameState);
     });
@@ -119,12 +120,11 @@ io.on('connection', (socket) => {
         gameState.currentHighestBet = 0;
         Object.values(gameState.players).forEach(p => {
             p.currentBet = 0;
-            p.folded = false;
+            if (p.chips > 0) p.folded = false;
         });
         io.emit('update-game', gameState);
     });
 
-    // NUEVO: Reiniciar toda la mesa por completo (borra todos los jugadores y pozos)
     socket.on('reset-all-game', () => {
         gameState = {
             players: {},
@@ -135,9 +135,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        // Opcional: si querés que se borren al cerrar la pestaña, descomentá la siguiente línea:
-        // delete gameState.players[socket.id];
-        // io.emit('update-game', gameState);
         console.log(`Jugador desconectado: ${socket.id}`);
     });
 });
