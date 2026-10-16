@@ -145,26 +145,32 @@
 
             let activePlayersCount = 0;
             for (let id in state.players) {
-                if (!state.players[id].folded && state.players[id].chips > 0) {
+                let p = state.players[id];
+                // Cuenta como activo en la mano si no foldeó y tiene fichas O tiene una apuesta en curso
+                if (!p.folded && (p.chips > 0 || p.currentBet > 0)) {
                     activePlayersCount++;
                 }
             }
 
             for (let id in state.players) {
                 let p = state.players[id];
+                let isEliminated = p.chips <= 0 && p.currentBet === 0;
+                let isAllIn = p.chips <= 0 && p.currentBet > 0;
+
                 if (id === myId) {
                     document.getElementById('my-chips').innerText = p.chips;
                     document.getElementById('my-bet').innerText = p.currentBet;
 
-                    if (p.chips <= 0) {
+                    if (isEliminated) {
                         document.getElementById('playing-controls').style.display = 'none';
                         document.getElementById('bankrupt-controls').style.display = 'block';
                     } else {
                         document.getElementById('playing-controls').style.display = 'block';
                         document.getElementById('bankrupt-controls').style.display = 'none';
 
-                        document.getElementById('btn-bet').disabled = p.folded;
-                        document.getElementById('btn-call').disabled = p.folded;
+                        // Si está en All-In (0 fichas pero con apuesta en mesa), no puede apostar ni igualar más, pero sí reclamar pozo si gana
+                        document.getElementById('btn-bet').disabled = p.folded || p.chips <= 0;
+                        document.getElementById('btn-call').disabled = p.folded || p.chips <= 0;
                         document.getElementById('btn-fold').disabled = p.folded;
 
                         const canWin = !p.folded && activePlayersCount <= 2;
@@ -172,11 +178,16 @@
                     }
                 }
 
+                let statusLabel = '';
+                if (isEliminated) statusLabel = '❌ [ELIMINADO]';
+                else if (isAllIn) statusLabel = '🔥 [ALL-IN]';
+                else if (p.folded) statusLabel = '[FOLD]';
+
                 container.innerHTML += `
-                    <div class="player-row" style="opacity: ${p.chips <= 0 ? 0.3 : (p.folded ? 0.4 : 1)}">
+                    <div class="player-row" style="opacity: ${isEliminated ? 0.3 : (p.folded ? 0.4 : 1)}">
                         <div>
                             <strong>${p.name} ${id === myId ? '(Vos)' : ''}</strong><br>
-                            Fichas: ${p.chips} | Apuesta: ${p.currentBet} ${p.chips <= 0 ? '❌ [ELIMINADO]' : (p.folded ? '[FOLD]' : '')}
+                            Fichas: ${p.chips} | Apuesta: ${p.currentBet} ${statusLabel}
                         </div>
                     </div>
                 `;
