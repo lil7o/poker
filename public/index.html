@@ -44,18 +44,27 @@
         <div class="card controls-box">
             <h3>Tus Acciones</h3>
             <p>Tus Fichas: <strong id="my-chips">0</strong> | Tu Apuesta: <strong id="my-bet">0</strong></p>
-            <div>
-                <input type="number" id="bet-amount" value="50" style="width: 80px;">
-                <button id="btn-bet" onclick="placeBet()">Apostar / Subir</button>
+            
+            <div id="playing-controls">
+                <div>
+                    <input type="number" id="bet-amount" value="50" style="width: 80px;">
+                    <button id="btn-bet" onclick="placeBet()">Apostar / Subir</button>
+                </div>
+                <div>
+                    <button id="btn-call" class="call" onclick="callBet()">Igualar (Call)</button>
+                    <button id="btn-fold" class="fold" onclick="fold()">Fold (No va)</button>
+                </div>
+                <div style="margin-top: 10px; border-top: 1px solid #2e7d32; padding-top: 10px;">
+                    <button id="btn-win" class="win" onclick="winPot()">¡Me llevé el pozo!</button>
+                    <button onclick="resetHand()" style="background: #e67e22; color: #fff;">Limpiar Pozo</button>
+                </div>
             </div>
-            <div>
-                <button id="btn-call" class="call" onclick="callBet()">Igualar (Call)</button>
-                <button id="btn-fold" class="fold" onclick="fold()">Fold (No va)</button>
+
+            <div id="bankrupt-controls" style="display:none; background: #c0392b; padding: 10px; border-radius: 5px;">
+                <p><strong>❌ Estás Eliminado (Sin fichas)</strong></p>
+                <p style="font-size: 12px; margin: 0;">Ya no podés participar en esta mesa.</p>
             </div>
-            <div style="margin-top: 10px; border-top: 1px solid #2e7d32; padding-top: 10px;">
-                <button id="btn-win" class="win" onclick="winPot()">¡Me llevé el pozo!</button>
-                <button onclick="resetHand()" style="background: #e67e22; color: #fff;">Limpiar Pozo</button>
-            </div>
+
             <div style="margin-top: 15px; display: flex; justify-content: center; gap: 5px;">
                 <button class="logout" onclick="logout()">Cerrar Sesión</button>
                 <button class="danger" onclick="resetAllGame()">Reiniciar Sala</button>
@@ -92,13 +101,10 @@
         }
 
         function logout() {
-            // Agregamos la confirmación antes de salir
             if (confirm("¿Estás seguro de que querés cerrar sesión y salir de la mesa?")) {
                 socket.emit('logout-player');
-
                 localStorage.removeItem('poker_username');
                 localStorage.removeItem('poker_chips');
-                
                 window.location.reload();
             }
         }
@@ -139,7 +145,7 @@
 
             let activePlayersCount = 0;
             for (let id in state.players) {
-                if (!state.players[id].folded) {
+                if (!state.players[id].folded && state.players[id].chips > 0) {
                     activePlayersCount++;
                 }
             }
@@ -150,19 +156,27 @@
                     document.getElementById('my-chips').innerText = p.chips;
                     document.getElementById('my-bet').innerText = p.currentBet;
 
-                    document.getElementById('btn-bet').disabled = p.folded;
-                    document.getElementById('btn-call').disabled = p.folded;
-                    document.getElementById('btn-fold').disabled = p.folded;
+                    if (p.chips <= 0) {
+                        document.getElementById('playing-controls').style.display = 'none';
+                        document.getElementById('bankrupt-controls').style.display = 'block';
+                    } else {
+                        document.getElementById('playing-controls').style.display = 'block';
+                        document.getElementById('bankrupt-controls').style.display = 'none';
 
-                    const canWin = !p.folded && activePlayersCount <= 2;
-                    document.getElementById('btn-win').disabled = !canWin;
+                        document.getElementById('btn-bet').disabled = p.folded;
+                        document.getElementById('btn-call').disabled = p.folded;
+                        document.getElementById('btn-fold').disabled = p.folded;
+
+                        const canWin = !p.folded && activePlayersCount <= 2;
+                        document.getElementById('btn-win').disabled = !canWin;
+                    }
                 }
 
                 container.innerHTML += `
-                    <div class="player-row" style="opacity: ${p.folded ? 0.4 : 1}">
+                    <div class="player-row" style="opacity: ${p.chips <= 0 ? 0.3 : (p.folded ? 0.4 : 1)}">
                         <div>
                             <strong>${p.name} ${id === myId ? '(Vos)' : ''}</strong><br>
-                            Fichas: ${p.chips} | Apuesta: ${p.currentBet} ${p.folded ? '[FOLD]' : ''}
+                            Fichas: ${p.chips} | Apuesta: ${p.currentBet} ${p.chips <= 0 ? '❌ [ELIMINADO]' : (p.folded ? '[FOLD]' : '')}
                         </div>
                     </div>
                 `;
