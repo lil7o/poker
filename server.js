@@ -139,7 +139,6 @@ io.on('connection', (socket) => {
         let player = gameState.players[socket.id];
         if (!player || player.folded) return;
 
-        // Solo se puede hacer check si la apuesta a igualar es 0
         let difference = gameState.currentHighestBet - player.currentBet;
         if (difference === 0) {
             addLog(`👉 ${player.name} hizo Check (Pasó).`);
