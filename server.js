@@ -97,12 +97,9 @@ io.on('connection', (socket) => {
 
     socket.on('win-pot', (winnerId) => {
         let winner = gameState.players[winnerId];
-        // Un jugador no puede ganar si no existe, si foldeó, o si está totalmente en bancarrota (0 fichas y 0 apuesta)
         if (!winner || winner.folded || (winner.chips <= 0 && winner.currentBet === 0)) return;
 
-        // Jugadores activos en la mano (no foldeados y con fichas o apuesta en mesa)
         let activePlayers = Object.values(gameState.players).filter(p => !p.folded && (p.chips > 0 || p.currentBet > 0));
-        
         if (activePlayers.length > 2) return;
 
         winner.chips += gameState.pot;
@@ -113,6 +110,29 @@ io.on('connection', (socket) => {
             p.currentBet = 0;
             p.folded = false;
         });
+        io.emit('update-game', gameState);
+    });
+
+    // NUEVO: Repartir Pozo (Split Pot)
+    socket.on('split-pot', () => {
+        let activePlayers = Object.values(gameState.players).filter(p => !p.folded && (p.chips > 0 || p.currentBet > 0));
+        if (activePlayers.length === 0 || gameState.pot <= 0) return;
+
+        let share = Math.floor(gameState.pot / activePlayers.length);
+        let remainder = gameState.pot % activePlayers.length;
+
+        activePlayers.forEach((p, index) => {
+            p.chips += share + (index < remainder ? 1 : 0);
+        });
+
+        gameState.pot = 0;
+        gameState.currentHighestBet = 0;
+
+        Object.values(gameState.players).forEach(p => {
+            p.currentBet = 0;
+            p.folded = false;
+        });
+
         io.emit('update-game', gameState);
     });
 
