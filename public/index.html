@@ -14,6 +14,7 @@
         button.call { background: #3498db; color: #fff; }
         button.fold { background: #e74c3c; color: #fff; }
         button.win { background: #2ecc71; color: #fff; }
+        button.split { background: #9b59b6; color: #fff; }
         button.logout { background: #7f8c8d; color: #fff; }
         button.danger { background: #c0392b; color: #fff; }
         button:disabled { background: #555 !important; color: #aaa !important; cursor: not-allowed; }
@@ -56,6 +57,7 @@
                 </div>
                 <div style="margin-top: 10px; border-top: 1px solid #2e7d32; padding-top: 10px;">
                     <button id="btn-win" class="win" onclick="winPot()">¡Me llevé el pozo!</button>
+                    <button id="btn-split" class="split" onclick="splitPot()">Repartir Pozo (Split)</button>
                     <button onclick="resetHand()" style="background: #e67e22; color: #fff;">Limpiar Pozo</button>
                 </div>
             </div>
@@ -132,6 +134,12 @@
             socket.emit('win-pot', socket.id);
         }
 
+        function splitPot() {
+            if (confirm("¿Repartir el pozo acumulado entre todos los jugadores activos en la mano?")) {
+                socket.emit('split-pot');
+            }
+        }
+
         function resetHand() {
             socket.emit('reset-hand');
         }
@@ -146,7 +154,6 @@
             let activePlayersCount = 0;
             for (let id in state.players) {
                 let p = state.players[id];
-                // Cuenta como activo en la mano si no foldeó y tiene fichas O tiene una apuesta en curso
                 if (!p.folded && (p.chips > 0 || p.currentBet > 0)) {
                     activePlayersCount++;
                 }
@@ -168,13 +175,13 @@
                         document.getElementById('playing-controls').style.display = 'block';
                         document.getElementById('bankrupt-controls').style.display = 'none';
 
-                        // Si está en All-In (0 fichas pero con apuesta en mesa), no puede apostar ni igualar más, pero sí reclamar pozo si gana
                         document.getElementById('btn-bet').disabled = p.folded || p.chips <= 0;
                         document.getElementById('btn-call').disabled = p.folded || p.chips <= 0;
                         document.getElementById('btn-fold').disabled = p.folded;
 
                         const canWin = !p.folded && activePlayersCount <= 2;
                         document.getElementById('btn-win').disabled = !canWin;
+                        document.getElementById('btn-split').disabled = state.pot === 0;
                     }
                 }
 
