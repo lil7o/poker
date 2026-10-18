@@ -11,8 +11,55 @@ app.use(express.static('public'));
 let gameState = {
     players: {},
     pot: 0,
-    currentHighestBet: 0
+    currentHighestBet: 0,
+    dealerIndex: 0,
+    currentTurnId: null,
+    history: []
 };
+
+function addLog(message) {
+    gameState.history.unshift(message);
+    if (gameState.history.length > 20) {
+        gameState.history.pop();
+    }
+}
+
+function getActivePlayerIds() {
+    return Object.keys(gameState.players).filter(id => {
+        let p = gameState.players[id];
+        return !p.folded && (p.chips > 0 || p.currentBet > 0);
+    });
+}
+
+function updateTurnAfterAction(currentSocketId) {
+    let playerIds = Object.keys(gameState.players);
+    if (playerIds.length === 0) {
+        gameState.currentTurnId = null;
+        return;
+    }
+
+    let activeIds = getActivePlayerIds();
+    if (activeIds.length === 0) {
+        gameState.currentTurnId = null;
+        return;
+    }
+
+    let currentIndex = playerIds.indexOf(currentSocketId);
+    let nextIndex = (currentIndex + 1) % playerIds.length;
+    let attempts = 0;
+
+    while (attempts < playerIds.length) {
+        let candidateId = playerIds[nextIndex];
+        let p = gameState.players[candidateId];
+        // El turno pasa al siguiente jugador que no haya foldeado y tenga fichas
+        if (p && !p.folded && p.chips > 0) {
+            gameState.currentTurnId = candidateId;
+            return;
+        }
+        nextIndex = (nextIndex + 1) % playerIds.length;
+        attempts++;
+    }
+}
 
 io.on('connection', (socket) => {
     console.log(`Jugador conectado: ${socket.id}`);
@@ -39,15 +86,26 @@ io.on('connection', (socket) => {
                     currentBet: 0,
                     folded: false
                 };
+                addLog(`👋 ${cleanName} se unió a la mesa con ${defaultChips} fichas.`);
             }
+        }
+
+        if (!gameState.currentTurnId) {
+            gameState.currentTurnId = socket.id;
         }
 
         io.emit('update-game', gameState);
     });
 
     socket.on('logout-player', () => {
-        if (gameState.players[socket.id]) {
+        let player = gameState.players[socket.id];
+        if (player) {
+            addLog(`🚪 ${player.name} abandonó la mesa.`);
             delete gameState.players[socket.id];
+            
+            if (gameState.currentTurnId === socket.id) {
+                updateTurnAfterAction(socket.id);
+            }
             io.emit('update-game', gameState);
         }
     });
@@ -62,10 +120,19 @@ io.on('connection', (socket) => {
         player.currentBet += amount;
         gameState.pot += amount;
 
+        let isAllIn = player.chips === 0;
+
         if (player.currentBet > gameState.currentHighestBet) {
             gameState.currentHighestBet = player.currentBet;
         }
 
+        if (isAllIn) {
+            addLog(`🔥 ¡${player.name} fue ALL-IN con ${player.currentBet} fichas!`);
+        } else {
+            addLog(`💰 ${player.name} apostó ${amount} fichas (Total: ${player.currentBet}).`);
+        }
+
+        updateTurnAfterAction(socket.id);
         io.emit('update-game', gameState);
     });
 
@@ -84,6 +151,13 @@ io.on('connection', (socket) => {
         player.currentBet += difference;
         gameState.pot += difference;
 
+        if (player.chips === 0) {
+            addLog(`🔥 ¡${player.name} igualó y quedó ALL-IN con ${player.currentBet} fichas!`);
+        } else {
+            addLog(`🤝 ${player.name} igualó (Call) ${difference} fichas.`);
+        }
+
+        updateTurnAfterAction(socket.id);
         io.emit('update-game', gameState);
     });
 
@@ -91,6 +165,8 @@ io.on('connection', (socket) => {
         let player = gameState.players[socket.id];
         if (player) {
             player.folded = true;
+            addLog(`❌ ${player.name} hizo Fold (se retiró).`);
+            updateTurnAfterAction(socket.id);
             io.emit('update-game', gameState);
         }
     });
@@ -99,25 +175,31 @@ io.on('connection', (socket) => {
         let winner = gameState.players[winnerId];
         if (!winner || winner.folded || (winner.chips <= 0 && winner.currentBet === 0)) return;
 
-        let activePlayers = Object.values(gameState.players).filter(p => !p.folded && (p.chips > 0 || p.currentBet > 0));
+        let activePlayers = getActivePlayerIds();
         if (activePlayers.length > 2) return;
 
+        let totalWon = gameState.pot;
         winner.chips += gameState.pot;
         gameState.pot = 0;
         gameState.currentHighestBet = 0;
-        
+
+        addLog(`🏆 ¡${winner.name} se llevó el pozo de ${totalWon} fichas!`);
+
         Object.values(gameState.players).forEach(p => {
             p.currentBet = 0;
             p.folded = false;
         });
+
+        // Al terminar mano, el turno pasa al siguiente
+        updateTurnAfterAction(winnerId);
         io.emit('update-game', gameState);
     });
 
-    // NUEVO: Repartir Pozo (Split Pot)
     socket.on('split-pot', () => {
         let activePlayers = Object.values(gameState.players).filter(p => !p.folded && (p.chips > 0 || p.currentBet > 0));
         if (activePlayers.length === 0 || gameState.pot <= 0) return;
 
+        let totalPot = gameState.pot;
         let share = Math.floor(gameState.pot / activePlayers.length);
         let remainder = gameState.pot % activePlayers.length;
 
@@ -125,6 +207,8 @@ io.on('connection', (socket) => {
             p.chips += share + (index < remainder ? 1 : 0);
         });
 
+        addLog(`⚖️ Se repartió el pozo de ${totalPot} fichas entre ${activePlayers.length} jugadores (${share} c/u).`);
+
         gameState.pot = 0;
         gameState.currentHighestBet = 0;
 
@@ -133,6 +217,16 @@ io.on('connection', (socket) => {
             p.folded = false;
         });
 
+        io.emit('update-game', gameState);
+    });
+
+    socket.on('next-dealer', () => {
+        let playerIds = Object.keys(gameState.players);
+        if (playerIds.length === 0) return;
+
+        gameState.dealerIndex = (gameState.dealerIndex + 1) % playerIds.length;
+        let dealerPlayer = gameState.players[playerIds[gameState.dealerIndex]];
+        addLog(`🔘 El Botón de Dealer pasó a ${dealerPlayer ? dealerPlayer.name : 'siguiente'}.`);
         io.emit('update-game', gameState);
     });
 
@@ -143,6 +237,7 @@ io.on('connection', (socket) => {
             p.currentBet = 0;
             p.folded = false;
         });
+        addLog(`🔄 Se limpió el pozo y se reinició la mano.`);
         io.emit('update-game', gameState);
     });
 
@@ -150,8 +245,12 @@ io.on('connection', (socket) => {
         gameState = {
             players: {},
             pot: 0,
-            currentHighestBet: 0
+            currentHighestBet: 0,
+            dealerIndex: 0,
+            currentTurnId: null,
+            history: []
         };
+        addLog(`🚨 La sala fue reiniciada por completo.`);
         io.emit('update-game', gameState);
     });
 
