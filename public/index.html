@@ -145,7 +145,7 @@
                 </div>
 
                 <div>
-                    <input type="number" id="bet-amount" value="50" style="width: 80px;">
+                    <input type="number" id="bet-amount" value="0" min="0" style="width: 80px;">
                     <button id="btn-bet" onclick="placeBet()">Apostar / Subir</button>
                 </div>
                 <div>
@@ -235,8 +235,12 @@
         }
 
         function placeBet() {
-            const amount = parseInt(document.getElementById('bet-amount').value) || 0;
+            const betInput = document.getElementById('bet-amount');
+            const amount = parseInt(betInput.value) || 0;
+            if (amount <= 0) return alert("Ingresá un monto mayor a 0 para apostar.");
+            
             socket.emit('place-bet', amount);
+            betInput.value = 0; // Reinicia el campo a 0 tras apostar
         }
 
         function checkBet() {
