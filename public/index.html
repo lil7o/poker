@@ -10,7 +10,6 @@
         .card { background: #143d1b; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 2px solid #f1c40f; }
         .pot { font-size: 22px; font-weight: bold; margin-bottom: 5px; color: #2ecc71; }
         
-        /* Jugadores y Turnos */
         .player-row { 
             background: #1a4d22; 
             padding: 10px; 
@@ -58,8 +57,8 @@
             text-transform: uppercase;
         }
 
-        /* Botones y Controles */
         button { background: #f1c40f; border: none; padding: 10px 15px; font-weight: bold; border-radius: 5px; cursor: pointer; color: #000; font-size: 14px; margin: 3px; }
+        button.check { background: #16a085; color: #fff; }
         button.call { background: #3498db; color: #fff; }
         button.fold { background: #e74c3c; color: #fff; }
         button.win { background: #2ecc71; color: #fff; }
@@ -72,7 +71,6 @@
         input { padding: 8px; border-radius: 5px; border: none; margin-bottom: 10px; width: 80%; }
         .controls-box { margin-top: 15px; display: flex; flex-direction: column; gap: 8px; }
 
-        /* Historial / Activity Log */
         .history-box {
             background: #0a1f0e;
             border: 1px solid #2e7d32;
@@ -132,6 +130,7 @@
                     <button id="btn-bet" onclick="placeBet()">Apostar / Subir</button>
                 </div>
                 <div>
+                    <button id="btn-check" class="check" onclick="checkBet()">Check (Pasar)</button>
                     <button id="btn-call" class="call" onclick="callBet()">Igualar (Call)</button>
                     <button id="btn-fold" class="fold" onclick="fold()">Fold (No va)</button>
                 </div>
@@ -153,7 +152,6 @@
             </div>
         </div>
 
-        <!-- Historial en vivo -->
         <div class="card">
             <h3 style="margin-top: 0;">📜 Historial de la Mesa</h3>
             <div id="history-container" class="history-box"></div>
@@ -206,6 +204,10 @@
         function placeBet() {
             const amount = parseInt(document.getElementById('bet-amount').value) || 0;
             socket.emit('place-bet', amount);
+        }
+
+        function checkBet() {
+            socket.emit('check');
         }
 
         function callBet() {
@@ -269,8 +271,13 @@
                         document.getElementById('playing-controls').style.display = 'block';
                         document.getElementById('bankrupt-controls').style.display = 'none';
 
+                        let diff = state.currentHighestBet - p.currentBet;
+
                         document.getElementById('btn-bet').disabled = p.folded || p.chips <= 0;
-                        document.getElementById('btn-call').disabled = p.folded || p.chips <= 0;
+                        // El botón de Check solo está activo si la diferencia a pagar es 0
+                        document.getElementById('btn-check').disabled = p.folded || diff > 0;
+                        // El botón de Igualar (Call) solo está activo si hay alguna apuesta por igualar (diff > 0)
+                        document.getElementById('btn-call').disabled = p.folded || p.chips <= 0 || diff <= 0;
                         document.getElementById('btn-fold').disabled = p.folded;
 
                         const canWin = !p.folded && activePlayersCount <= 2;
@@ -301,7 +308,6 @@
                 `;
             });
 
-            // Actualizar el Historial
             const historyContainer = document.getElementById('history-container');
             historyContainer.innerHTML = '';
             if (state.history && state.history.length > 0) {
