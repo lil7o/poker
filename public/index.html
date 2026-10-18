@@ -6,20 +6,97 @@
     <title>Mesa de Poker Multijugador</title>
     <style>
         body { font-family: Arial, sans-serif; background: #0f2c14; color: #fff; text-align: center; margin: 0; padding: 15px; }
-        h1 { color: #f1c40f; font-size: 22px; }
+        h1 { color: #f1c40f; font-size: 22px; margin-bottom: 5px; }
         .card { background: #143d1b; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 2px solid #f1c40f; }
-        .pot { font-size: 20px; font-weight: bold; margin-bottom: 10px; color: #2ecc71; }
-        .player-row { background: #1a4d22; padding: 10px; margin: 8px 0; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+        .pot { font-size: 22px; font-weight: bold; margin-bottom: 5px; color: #2ecc71; }
+        
+        /* Jugadores y Turnos */
+        .player-row { 
+            background: #1a4d22; 
+            padding: 10px; 
+            margin: 8px 0; 
+            border-radius: 6px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            font-size: 14px; 
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .player-row.turn-active {
+            border-color: #f1c40f;
+            background: #27692f;
+            box-shadow: 0 0 10px #f1c40f;
+            animation: pulse-turn 1.5s infinite;
+        }
+
+        .player-row.is-allin {
+            border-color: #e67e22;
+            background: #5c2c06;
+            animation: pulse-allin 1s infinite;
+        }
+
+        .dealer-badge {
+            background: #f1c40f;
+            color: #000;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 50%;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+
+        .turn-badge {
+            background: #2ecc71;
+            color: #000;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            margin-left: 5px;
+            text-transform: uppercase;
+        }
+
+        /* Botones y Controles */
         button { background: #f1c40f; border: none; padding: 10px 15px; font-weight: bold; border-radius: 5px; cursor: pointer; color: #000; font-size: 14px; margin: 3px; }
         button.call { background: #3498db; color: #fff; }
         button.fold { background: #e74c3c; color: #fff; }
         button.win { background: #2ecc71; color: #fff; }
         button.split { background: #9b59b6; color: #fff; }
+        button.dealer { background: #e67e22; color: #fff; }
         button.logout { background: #7f8c8d; color: #fff; }
         button.danger { background: #c0392b; color: #fff; }
         button:disabled { background: #555 !important; color: #aaa !important; cursor: not-allowed; }
+        
         input { padding: 8px; border-radius: 5px; border: none; margin-bottom: 10px; width: 80%; }
         .controls-box { margin-top: 15px; display: flex; flex-direction: column; gap: 8px; }
+
+        /* Historial / Activity Log */
+        .history-box {
+            background: #0a1f0e;
+            border: 1px solid #2e7d32;
+            border-radius: 6px;
+            padding: 10px;
+            max-height: 120px;
+            overflow-y: auto;
+            text-align: left;
+            font-size: 12px;
+            color: #ddd;
+        }
+        .history-item { padding: 3px 0; border-bottom: 1px dashed #143d1b; }
+
+        @keyframes pulse-turn {
+            0% { box-shadow: 0 0 5px #f1c40f; }
+            50% { box-shadow: 0 0 15px #f1c40f; }
+            100% { box-shadow: 0 0 5px #f1c40f; }
+        }
+
+        @keyframes pulse-allin {
+            0% { box-shadow: 0 0 5px #e67e22; }
+            50% { box-shadow: 0 0 15px #e74c3c; }
+            100% { box-shadow: 0 0 5px #e67e22; }
+        }
     </style>
 </head>
 <body>
@@ -35,6 +112,9 @@
         <div class="card">
             <h1>Mesa de Poker</h1>
             <div class="pot">Pozo Acumulado: <span id="pot-amount">0</span> fichas</div>
+            <div>
+                <button class="dealer" onclick="nextDealer()">🔘 Rotar Dealer (Botón)</button>
+            </div>
         </div>
 
         <div class="card">
@@ -71,6 +151,12 @@
                 <button class="logout" onclick="logout()">Cerrar Sesión</button>
                 <button class="danger" onclick="resetAllGame()">Reiniciar Sala</button>
             </div>
+        </div>
+
+        <!-- Historial en vivo -->
+        <div class="card">
+            <h3 style="margin-top: 0;">📜 Historial de la Mesa</h3>
+            <div id="history-container" class="history-box"></div>
         </div>
     </div>
 
@@ -140,6 +226,10 @@
             }
         }
 
+        function nextDealer() {
+            socket.emit('next-dealer');
+        }
+
         function resetHand() {
             socket.emit('reset-hand');
         }
@@ -151,7 +241,9 @@
             const container = document.getElementById('players-container');
             container.innerHTML = '';
 
+            let playerKeys = Object.keys(state.players);
             let activePlayersCount = 0;
+
             for (let id in state.players) {
                 let p = state.players[id];
                 if (!p.folded && (p.chips > 0 || p.currentBet > 0)) {
@@ -159,10 +251,12 @@
                 }
             }
 
-            for (let id in state.players) {
+            playerKeys.forEach((id, index) => {
                 let p = state.players[id];
                 let isEliminated = p.chips <= 0 && p.currentBet === 0;
                 let isAllIn = p.chips <= 0 && p.currentBet > 0;
+                let isDealer = index === state.dealerIndex;
+                let isTurn = id === state.currentTurnId && !isEliminated && !p.folded;
 
                 if (id === myId) {
                     document.getElementById('my-chips').innerText = p.chips;
@@ -190,14 +284,32 @@
                 else if (isAllIn) statusLabel = '🔥 [ALL-IN]';
                 else if (p.folded) statusLabel = '[FOLD]';
 
+                let rowClass = 'player-row';
+                if (isTurn) rowClass += ' turn-active';
+                if (isAllIn) rowClass += ' is-allin';
+
                 container.innerHTML += `
-                    <div class="player-row" style="opacity: ${isEliminated ? 0.3 : (p.folded ? 0.4 : 1)}">
+                    <div class="${rowClass}" style="opacity: ${isEliminated ? 0.3 : (p.folded ? 0.4 : 1)}">
                         <div>
-                            <strong>${p.name} ${id === myId ? '(Vos)' : ''}</strong><br>
+                            <strong>${p.name} ${id === myId ? '(Vos)' : ''}</strong>
+                            ${isDealer ? '<span class="dealer-badge">D</span>' : ''}
+                            ${isTurn ? '<span class="turn-badge">Turno</span>' : ''}
+                            <br>
                             Fichas: ${p.chips} | Apuesta: ${p.currentBet} ${statusLabel}
                         </div>
                     </div>
                 `;
+            });
+
+            // Actualizar el Historial
+            const historyContainer = document.getElementById('history-container');
+            historyContainer.innerHTML = '';
+            if (state.history && state.history.length > 0) {
+                state.history.forEach(item => {
+                    historyContainer.innerHTML += `<div class="history-item">${item}</div>`;
+                });
+            } else {
+                historyContainer.innerHTML = '<div class="history-item">Esperando acciones...</div>';
             }
         });
     </script>
