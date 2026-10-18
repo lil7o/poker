@@ -64,12 +64,22 @@
         button.win { background: #2ecc71; color: #fff; }
         button.split { background: #9b59b6; color: #fff; }
         button.dealer { background: #e67e22; color: #fff; }
+        button.quick-bet { background: #34495e; color: #f1c40f; border: 1px solid #f1c40f; padding: 6px 10px; font-size: 12px; }
+        button.allin-bet { background: #d35400; color: #fff; padding: 6px 10px; font-size: 12px; }
         button.logout { background: #7f8c8d; color: #fff; }
         button.danger { background: #c0392b; color: #fff; }
-        button:disabled { background: #555 !important; color: #aaa !important; cursor: not-allowed; }
+        button:disabled { background: #555 !important; color: #aaa !important; border-color: #555 !important; cursor: not-allowed; }
         
         input { padding: 8px; border-radius: 5px; border: none; margin-bottom: 10px; width: 80%; }
         .controls-box { margin-top: 15px; display: flex; flex-direction: column; gap: 8px; }
+
+        .quick-bets-container {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
 
         .history-box {
             background: #0a1f0e;
@@ -125,6 +135,15 @@
             <p>Tus Fichas: <strong id="my-chips">0</strong> | Tu Apuesta: <strong id="my-bet">0</strong></p>
             
             <div id="playing-controls">
+                <!-- Botones de Apuesta Rápida -->
+                <div class="quick-bets-container">
+                    <button type="button" class="quick-bet" onclick="addQuickBet(25)">+25</button>
+                    <button type="button" class="quick-bet" onclick="addQuickBet(50)">+50</button>
+                    <button type="button" class="quick-bet" onclick="addQuickBet(100)">+100</button>
+                    <button type="button" class="quick-bet" onclick="addQuickBet(500)">+500</button>
+                    <button type="button" class="allin-bet" onclick="setAllInBet()">🔥 All-In</button>
+                </div>
+
                 <div>
                     <input type="number" id="bet-amount" value="50" style="width: 80px;">
                     <button id="btn-bet" onclick="placeBet()">Apostar / Subir</button>
@@ -162,6 +181,7 @@
     <script>
         const socket = io();
         let myId = null;
+        let myCurrentChips = 0;
 
         window.onload = () => {
             const savedName = localStorage.getItem('poker_username');
@@ -199,6 +219,19 @@
             if (confirm("¿Seguro que querés reiniciar toda la sala y borrar a todos los jugadores?")) {
                 socket.emit('reset-all-game');
             }
+        }
+
+        function addQuickBet(amount) {
+            const betInput = document.getElementById('bet-amount');
+            let currentVal = parseInt(betInput.value) || 0;
+            let newVal = currentVal + amount;
+            if (newVal > myCurrentChips) newVal = myCurrentChips;
+            betInput.value = newVal;
+        }
+
+        function setAllInBet() {
+            const betInput = document.getElementById('bet-amount');
+            betInput.value = myCurrentChips;
         }
 
         function placeBet() {
@@ -261,6 +294,7 @@
                 let isTurn = id === state.currentTurnId && !isEliminated && !p.folded;
 
                 if (id === myId) {
+                    myCurrentChips = p.chips;
                     document.getElementById('my-chips').innerText = p.chips;
                     document.getElementById('my-bet').innerText = p.currentBet;
 
@@ -274,9 +308,7 @@
                         let diff = state.currentHighestBet - p.currentBet;
 
                         document.getElementById('btn-bet').disabled = p.folded || p.chips <= 0;
-                        // El botón de Check solo está activo si la diferencia a pagar es 0
                         document.getElementById('btn-check').disabled = p.folded || diff > 0;
-                        // El botón de Igualar (Call) solo está activo si hay alguna apuesta por igualar (diff > 0)
                         document.getElementById('btn-call').disabled = p.folded || p.chips <= 0 || diff <= 0;
                         document.getElementById('btn-fold').disabled = p.folded;
 
