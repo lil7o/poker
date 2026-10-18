@@ -183,19 +183,18 @@ io.on('connection', (socket) => {
 
     socket.on('win-pot', (winnerId) => {
         let winner = gameState.players[winnerId];
+        // Solo verificamos que el jugador exista, no haya foldeado y no esté totalmente eliminado
         if (!winner || winner.folded || (winner.chips <= 0 && winner.currentBet === 0)) return;
+        if (gameState.pot <= 0) return;
 
-        let activePlayers = getActivePlayerIds();
-        if (activePlayers.length > 2) return;
-
-        // Calculamos el pozo máximo que le corresponde según lo que apostó en la mano
+        // Calculamos el pozo máximo que le corresponde según su apuesta en la mano
         let winnerMaxDisputable = 0;
         Object.values(gameState.players).forEach(p => {
             winnerMaxDisputable += Math.min(p.currentBet, winner.currentBet);
         });
 
-        // Si el pozo total supera lo que el ganador disputó (en caso de All-In corto):
-        let wonAmount = Math.min(gameState.pot, winnerMaxDisputable);
+        // Si disputó pozo (o si nadie había apostado aún pero había pozo acumulado)
+        let wonAmount = winnerMaxDisputable > 0 ? Math.min(gameState.pot, winnerMaxDisputable) : gameState.pot;
         let remainingPot = gameState.pot - wonAmount;
 
         winner.chips += wonAmount;
@@ -203,11 +202,12 @@ io.on('connection', (socket) => {
         gameState.currentHighestBet = 0;
 
         if (remainingPot > 0) {
-            addLog(`🏆 ¡${winner.name} ganó su Pozo de ${wonAmount} fichas! Quedan ${remainingPot} fichas en el pozo para los demás.`);
+            addLog(`🏆 ¡${winner.name} ganó su Pozo de ${wonAmount} fichas! Quedan ${remainingPot} en el pozo para los demás.`);
         } else {
             addLog(`🏆 ¡${winner.name} se llevó el pozo de ${wonAmount} fichas!`);
         }
 
+        // Reseteamos las apuestas de la mano actual
         Object.values(gameState.players).forEach(p => {
             p.currentBet = 0;
             p.folded = false;
