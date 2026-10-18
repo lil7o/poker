@@ -113,11 +113,12 @@ io.on('connection', (socket) => {
         let player = gameState.players[socket.id];
         if (!player || player.folded || player.chips <= 0) return;
 
-        if (amount > player.chips) return;
+        let actualBet = Math.min(amount, player.chips);
+        if (actualBet <= 0) return;
 
-        player.chips -= amount;
-        player.currentBet += amount;
-        gameState.pot += amount;
+        player.chips -= actualBet;
+        player.currentBet += actualBet;
+        gameState.pot += actualBet;
 
         let isAllIn = player.chips === 0;
 
@@ -128,7 +129,7 @@ io.on('connection', (socket) => {
         if (isAllIn) {
             addLog(`🔥 ¡${player.name} fue ALL-IN con ${player.currentBet} fichas!`);
         } else {
-            addLog(`💰 ${player.name} apostó ${amount} fichas (Total: ${player.currentBet}).`);
+            addLog(`💰 ${player.name} apostó ${actualBet} fichas (Total en mano: ${player.currentBet}).`);
         }
 
         updateTurnAfterAction(socket.id);
@@ -154,18 +155,16 @@ io.on('connection', (socket) => {
         let difference = gameState.currentHighestBet - player.currentBet;
         if (difference <= 0) return;
 
-        if (difference > player.chips) {
-            difference = player.chips;
-        }
+        let actualCall = Math.min(difference, player.chips);
 
-        player.chips -= difference;
-        player.currentBet += difference;
-        gameState.pot += difference;
+        player.chips -= actualCall;
+        player.currentBet += actualCall;
+        gameState.pot += actualCall;
 
         if (player.chips === 0) {
             addLog(`🔥 ¡${player.name} igualó y quedó ALL-IN con ${player.currentBet} fichas!`);
         } else {
-            addLog(`🤝 ${player.name} igualó (Call) ${difference} fichas.`);
+            addLog(`🤝 ${player.name} igualó (Call) ${actualCall} fichas.`);
         }
 
         updateTurnAfterAction(socket.id);
@@ -189,12 +188,25 @@ io.on('connection', (socket) => {
         let activePlayers = getActivePlayerIds();
         if (activePlayers.length > 2) return;
 
-        let totalWon = gameState.pot;
-        winner.chips += gameState.pot;
-        gameState.pot = 0;
+        // Calculamos el pozo máximo que le corresponde según lo que apostó en la mano
+        let winnerMaxDisputable = 0;
+        Object.values(gameState.players).forEach(p => {
+            winnerMaxDisputable += Math.min(p.currentBet, winner.currentBet);
+        });
+
+        // Si el pozo total supera lo que el ganador disputó (en caso de All-In corto):
+        let wonAmount = Math.min(gameState.pot, winnerMaxDisputable);
+        let remainingPot = gameState.pot - wonAmount;
+
+        winner.chips += wonAmount;
+        gameState.pot = remainingPot;
         gameState.currentHighestBet = 0;
 
-        addLog(`🏆 ¡${winner.name} se llevó el pozo de ${totalWon} fichas!`);
+        if (remainingPot > 0) {
+            addLog(`🏆 ¡${winner.name} ganó su Pozo de ${wonAmount} fichas! Quedan ${remainingPot} fichas en el pozo para los demás.`);
+        } else {
+            addLog(`🏆 ¡${winner.name} se llevó el pozo de ${wonAmount} fichas!`);
+        }
 
         Object.values(gameState.players).forEach(p => {
             p.currentBet = 0;
