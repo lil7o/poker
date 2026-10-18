@@ -64,6 +64,7 @@
         button.win { background: #2ecc71; color: #fff; }
         button.split { background: #9b59b6; color: #fff; }
         button.dealer { background: #e67e22; color: #fff; }
+        button.info { background: #2980b9; color: #fff; }
         button.quick-bet { background: #34495e; color: #f1c40f; border: 1px solid #f1c40f; padding: 6px 10px; font-size: 12px; }
         button.allin-bet { background: #d35400; color: #fff; padding: 6px 10px; font-size: 12px; }
         button.logout { background: #7f8c8d; color: #fff; }
@@ -94,6 +95,67 @@
         }
         .history-item { padding: 3px 0; border-bottom: 1px dashed #143d1b; }
 
+        /* Estilos del Modal (Pestaña de Jerarquía de Manos) */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background-color: #143d1b;
+            margin: 10% auto;
+            padding: 20px;
+            border: 2px solid #f1c40f;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 450px;
+            text-align: left;
+            color: #fff;
+            box-shadow: 0 0 15px #000;
+        }
+
+        .close-btn {
+            color: #f1c40f;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .hand-list {
+            list-style: none;
+            padding: 0;
+            margin: 15px 0 0 0;
+            font-size: 13px;
+        }
+
+        .hand-item {
+            background: #1a4d22;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            border-left: 4px solid #f1c40f;
+        }
+
+        .hand-title {
+            font-weight: bold;
+            color: #f1c40f;
+            font-size: 14px;
+        }
+
+        .hand-desc {
+            color: #ccc;
+            font-size: 12px;
+            margin-top: 2px;
+        }
+
         @keyframes pulse-turn {
             0% { box-shadow: 0 0 5px #f1c40f; }
             50% { box-shadow: 0 0 15px #f1c40f; }
@@ -120,8 +182,9 @@
         <div class="card">
             <h1>Mesa de Poker</h1>
             <div class="pot">Pozo Acumulado: <span id="pot-amount">0</span> fichas</div>
-            <div>
-                <button class="dealer" onclick="nextDealer()">🔘 Rotar Dealer (Botón)</button>
+            <div style="display: flex; justify-content: center; gap: 5px;">
+                <button class="dealer" onclick="nextDealer()">🔘 Rotar Dealer</button>
+                <button class="info" onclick="openHandsModal()">ℹ️ Tabla de Jugadas</button>
             </div>
         </div>
 
@@ -177,6 +240,58 @@
         </div>
     </div>
 
+    <!-- Modal de Jerarquía de Manos -->
+    <div id="hands-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeHandsModal()">&times;</span>
+            <h2 style="color: #f1c40f; margin-top: 0;">Jerarquía de Manos</h2>
+            <p style="font-size: 12px; color: #aaa;">De mayor (1) a menor valor (10):</p>
+            
+            <ul class="hand-list">
+                <li class="hand-item">
+                    <div class="hand-title">1. Escalera Real</div>
+                    <div class="hand-desc">A, K, Q, J, 10 del mismo palo.</div>
+                </li>
+                <li class="hand-item">
+                    <div class="hand-title">2. Escalera de Color</div>
+                    <div class="hand-desc">5 cartas consecutivas del mismo palo.</div>
+                </li>
+                <li class="hand-item">
+                    <div class="hand-title">3. Póker</div>
+                    <div class="hand-desc">4 cartas del mismo valor.</div>
+                </li>
+                <li class="hand-item">
+                    <div class="hand-title">4. Full House</div>
+                    <div class="hand-desc">3 cartas de un valor + 2 de otro valor (Trío + Pareja).</div>
+                </li>
+                <li class="hand-item">
+                    <div class="hand-title">5. Color (Flush)</div>
+                    <div class="hand-desc">5 cartas del mismo palo (no consecutivas).</div>
+                </li>
+                <li class="hand-item">
+                    <div class="hand-title">6. Escalera (Straight)</div>
+                    <div class="hand-desc">5 cartas consecutivas de cualquier palo.</div>
+                </li>
+                <li class="hand-item">
+                    <div class="hand-title">7. Trío (Three of a Kind)</div>
+                    <div class="hand-desc">3 cartas del mismo valor.</div>
+                </li>
+                <li class="hand-item">
+                    <div class="hand-title">8. Doble Pareja (Two Pair)</div>
+                    <div class="hand-desc">2 parejas de distinto valor.</div>
+                </li>
+                <li class="hand-item">
+                    <div class="hand-title">9. Pareja (One Pair)</div>
+                    <div class="hand-desc">2 cartas del mismo valor.</div>
+                </li>
+                <li class="hand-item">
+                    <div class="hand-title">10. Carta Alta</div>
+                    <div class="hand-desc">La carta de mayor valor si nadie tiene combinación.</div>
+                </li>
+            </ul>
+        </div>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
@@ -221,6 +336,22 @@
             }
         }
 
+        function openHandsModal() {
+            document.getElementById('hands-modal').style.display = 'block';
+        }
+
+        function closeHandsModal() {
+            document.getElementById('hands-modal').style.display = 'none';
+        }
+
+        // Cerrar el modal al hacer clic fuera de él
+        window.onclick = function(event) {
+            const modal = document.getElementById('hands-modal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        }
+
         function addQuickBet(amount) {
             const betInput = document.getElementById('bet-amount');
             let currentVal = parseInt(betInput.value) || 0;
@@ -240,7 +371,7 @@
             if (amount <= 0) return alert("Ingresá un monto mayor a 0 para apostar.");
             
             socket.emit('place-bet', amount);
-            betInput.value = 0; // Reinicia el campo a 0 tras apostar
+            betInput.value = 0;
         }
 
         function checkBet() {
