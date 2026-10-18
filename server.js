@@ -51,7 +51,6 @@ function updateTurnAfterAction(currentSocketId) {
     while (attempts < playerIds.length) {
         let candidateId = playerIds[nextIndex];
         let p = gameState.players[candidateId];
-        // El turno pasa al siguiente jugador que no haya foldeado y tenga fichas
         if (p && !p.folded && p.chips > 0) {
             gameState.currentTurnId = candidateId;
             return;
@@ -136,6 +135,19 @@ io.on('connection', (socket) => {
         io.emit('update-game', gameState);
     });
 
+    socket.on('check', () => {
+        let player = gameState.players[socket.id];
+        if (!player || player.folded) return;
+
+        // Solo se puede hacer check si la apuesta a igualar es 0
+        let difference = gameState.currentHighestBet - player.currentBet;
+        if (difference === 0) {
+            addLog(`👉 ${player.name} hizo Check (Pasó).`);
+            updateTurnAfterAction(socket.id);
+            io.emit('update-game', gameState);
+        }
+    });
+
     socket.on('call', () => {
         let player = gameState.players[socket.id];
         if (!player || player.folded || player.chips <= 0) return;
@@ -190,7 +202,6 @@ io.on('connection', (socket) => {
             p.folded = false;
         });
 
-        // Al terminar mano, el turno pasa al siguiente
         updateTurnAfterAction(winnerId);
         io.emit('update-game', gameState);
     });
